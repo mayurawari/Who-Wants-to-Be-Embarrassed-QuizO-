@@ -10,7 +10,7 @@ It delivers a smooth user experience with responsive design and real-time feedba
 # Initialization Process:
 
 ## 1. Clone and enter the project
- git clone https://github.com/your-username/quizo.git
+ git clone https://github.com/mayurawari/Who-Wants-to-Be-Embarrassed-QuizO-.git
  cd quizo
 
 ## 2. Install dependencies
@@ -86,8 +86,10 @@ Open your browser and navigate to: http://localhost:3000
 
 ## ScreenShots:
 <p align="center">
-  <img src="assets/screens/topic.png" alt="Topic Screen" width="360" />
-  <img src="assets/screens/rulebook.png" alt="Rule Book" width="360" />
+  <img src="FrontEnd/src/assets/ss/Screenshot (32).png" alt="Topic Screen" width="360" />
+  <img src="FrontEnd/src/assets/ss/Screenshot (31).png" alt="Rule Book" width="360" />
+  <img src="FrontEnd/src/assets/ss/Screenshot (33).png" alt="Rule Book" width="360" />
+  <img src="FrontEnd/src/assets/ss/Screenshot (35).png" alt="Rule Book" width="360" />
 </p>
 
 ## Deployed Links:
