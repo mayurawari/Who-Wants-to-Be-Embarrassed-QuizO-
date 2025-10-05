@@ -9,7 +9,7 @@ import { QuestionSkeleton } from "@/components/SkeletonLoader";
 import { TopicContext } from "@/contexts/TopicContext";
 
 const fetchQuizData = async (topic) => {
-  const res = await fetch("http://localhost:9090/api/AIquestions", {
+  const res = await fetch("https://who-wants-to-be-embarrassed-quiz-o.vercel.app/api/AIquestions", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({customtopic:topic}),
@@ -19,7 +19,7 @@ const fetchQuizData = async (topic) => {
 };
 
 const submitQuizAnswers = async (answers) => {
-  const res = await fetch("http://localhost:9090/api/bydefault/getscore", {
+  const res = await fetch("https://who-wants-to-be-embarrassed-quiz-o.vercel.app/api/bydefault/getscore", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(answers),
