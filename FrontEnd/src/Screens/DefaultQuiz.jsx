@@ -8,17 +8,22 @@ import { QuestionCard } from "@/components/QuestionCard";
 import { QuestionSkeleton } from "@/components/SkeletonLoader";
 
 const fetchQuizData = async () => {
-  const res = await fetch("https://who-wants-to-be-embarrassed-quizo.onrender.com/api/bydefault");
+  const res = await fetch(
+    "https://who-wants-to-be-embarrassed-quizo.onrender.com/api/bydefault"
+  );
   if (!res.ok) throw new Error("Failed to fetch quiz");
   return res.json();
 };
 
 const submitQuizAnswers = async (answers) => {
-  const res = await fetch("https://who-wants-to-be-embarrassed-quizo.onrender.com/api/bydefault/getscore", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(answers),
-  });
+  const res = await fetch(
+    "https://who-wants-to-be-embarrassed-quizo.onrender.com/api/bydefault/getscore",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(answers),
+    }
+  );
   if (!res.ok) throw new Error("Failed to submit quiz");
   return res.json();
 };
@@ -26,7 +31,6 @@ const submitQuizAnswers = async (answers) => {
 export const DefaultQuiz = () => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["defaultquiz"],
@@ -115,30 +119,41 @@ export const DefaultQuiz = () => {
     setCurrentQuestionIndex(nextindex);
   };
 
-  const computeLocalResult = (QAset) => {
-    let score = 0;
-    const wrong = [];
-    const na = [];
-    for (const q of QAset) {
-      if (q.notanswered) {
-        na.push({ id: q.id, question: q.question });
-      } else {
-        if (q.answer === q.correctoption) {
-          score += 1;
-        } else {
-          wrong.push({
-            id: q.id,
-            question: q.question,
-            answer: q.answer,
-            correctoption: q.correctoption,
-          });
-        }
+  // Compute payload only; do not compute local results anymore
+  const buildQAset = () => {
+    let latestSelected = selectedAnswers;
+    try {
+      const saved = localStorage.getItem("defaultquiz_selectedAnswers");
+      if (saved) {
+        latestSelected = { ...JSON.parse(saved), ...selectedAnswers };
       }
-    }
-    return { totalscore: score, wronganswers: wrong, notansweredQA: na };
+    } catch {}
+    const answeredIds = new Set(Object.keys(latestSelected || {}).map(Number));
+    const QAobjArr = (data || []).map((q) =>
+      answeredIds.has(q.id)
+        ? { ...q, answer: latestSelected[q.id], notanswered: false }
+        : { ...q, answer: null, notanswered: true }
+    );
+    return QAobjArr;
   };
 
-  const mutation = useMutation({ mutationFn: submitQuizAnswers });
+  // Use isPending to gate a global loader
+  const mutation = useMutation({
+    mutationFn: submitQuizAnswers,
+    onSuccess: (resp) => {
+      setFinalScore(resp.totalscore);
+      setWrongQA(resp.wronganswers);
+      setNotansweredQA(resp.notansweredQA);
+      queryClient.invalidateQueries({ queryKey: ["defaultquiz"] });
+      try {
+        localStorage.removeItem("defaultquiz_selectedAnswers");
+      } catch {}
+      setSubmitted(true);
+    },
+    onSettled: () => {
+      submittingRef.current = false;
+    },
+  });
 
   const handleSubmit = () => {
     setshowModal(true);
@@ -177,6 +192,7 @@ export const DefaultQuiz = () => {
       intervalRef.current = null;
     }
     if (!data) {
+      // No data; treat as empty submission
       setSubmitted(true);
       setFinalScore(0);
       setWrongQA([]);
@@ -184,48 +200,8 @@ export const DefaultQuiz = () => {
       submittingRef.current = false;
       return;
     }
-
-    let latestSelected = selectedAnswers;
-    try {
-      const saved = localStorage.getItem("defaultquiz_selectedAnswers");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        latestSelected = { ...parsed, ...selectedAnswers };
-      }
-    } catch {}
-
-    const answeredIds = new Set(Object.keys(latestSelected || {}).map(Number));
-    const QAobjArr = data.map((q) => {
-      if (answeredIds.has(q.id)) {
-        return { ...q, answer: latestSelected[q.id], notanswered: false };
-      }
-      return { ...q, answer: null, notanswered: true };
-    });
-
-    const local = computeLocalResult(QAobjArr);
-    setFinalScore(local.totalscore);
-    setWrongQA(local.wronganswers);
-    setNotansweredQA(local.notansweredQA);
-    setSubmitted(true);
-
-    mutation.mutate(
-      { QAset: QAobjArr },
-      {
-        onSuccess: (resp) => {
-          setFinalScore(resp.totalscore);
-          setWrongQA(resp.wronganswers);
-          setNotansweredQA(resp.notansweredQA);
-          queryClient.invalidateQueries({ queryKey: ["defaultquiz"] });
-          try {
-            localStorage.removeItem("defaultquiz_selectedAnswers");
-          } catch {}
-          submittingRef.current = false;
-        },
-        onError: () => {
-          submittingRef.current = false;
-        },
-      }
-    );
+    const QAobjArr = buildQAset();
+    mutation.mutate({ QAset: QAobjArr });
   };
 
   const atLastQuestion = data && currentQuestionIndex === data.length - 1;
@@ -234,15 +210,17 @@ export const DefaultQuiz = () => {
 
   return (
     <div className="min-h-screen bg-[#0b0f1a] flex items-start sm:items-center justify-center px-4 sm:px-6 py-6">
-      <div className="w-full max-w-6xl bg-[#EBE9E1] rounded-[28px] shadow-xl border border-[rgba(2,6,23,0.06)]
-                      px-5 sm:px-8 md:px-12 lg:px-14 py-6 sm:py-8">
+      <div
+        className="w-full max-w-6xl bg-[#EBE9E1] rounded-[28px] shadow-xl border border-[rgba(2,6,23,0.06)]
+                      px-5 sm:px-8 md:px-12 lg:px-14 py-6 sm:py-8"
+      >
         <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <h1 className="text-[#151618] font-medium text-2xl sm:text-3xl md:text-4xl">
             Quiz
           </h1>
 
-          {!submitted && (
-            <div className="w-full md:w-auto md:min-w-[340px]">
+          {!submitted && !mutation.isPending && (
+            <div className="w-full md:w-auto md:min-w=[340px]">
               <div className="flex items-center justify-between text-[#151618]">
                 <span className="text-sm sm:text-base">Time Remaining</span>
                 <span className="text-sm sm:text-base font-bold">
@@ -259,9 +237,21 @@ export const DefaultQuiz = () => {
           )}
         </header>
 
-        {/* Main */}
         <main className="mt-6">
-          {!submitted && (
+          {/* Global blocking loader while awaiting backend score */}
+          {mutation.isPending && (
+            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+              <div className="bg-white rounded-2xl w-full max-w-sm p-6 flex flex-col items-center">
+                <div className="w-10 h-10 border-4 border-[#E43D12] border-t-transparent rounded-full animate-spin" />
+                <p className="mt-4 text-[#151618] font-medium">
+                  Calculating final score...
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Quiz body before submit */}
+          {!mutation.isPending && !submitted && (
             <section className="w-full">
               <div className="w-full">
                 {isLoading ? (
@@ -287,7 +277,9 @@ export const DefaultQuiz = () => {
                         text={"Previous"}
                         isDisabled={currentQuestionIndex === 0}
                         styles="w-full sm:w-auto"
-                        handleAction={() => handlePrevious(currentQuestionIndex)}
+                        handleAction={() =>
+                          handlePrevious(currentQuestionIndex)
+                        }
                       />
                     )}
                   </div>
@@ -297,7 +289,9 @@ export const DefaultQuiz = () => {
                       width="w-full sm:w-auto"
                       isDisabled={false}
                       handleAction={() =>
-                        atLastQuestion ? handleSubmit() : handleNext(currentQuestionIndex)
+                        atLastQuestion
+                          ? handleSubmit()
+                          : handleNext(currentQuestionIndex)
                       }
                     />
                   </div>
@@ -306,15 +300,18 @@ export const DefaultQuiz = () => {
             </section>
           )}
 
+          {/* No answers selected edge-case after submission */}
           {submitted &&
             wrongQA.length === 0 &&
-            notansweredQA.length === (data?.length || 0) && (
+            notansweredQA.length === (data?.length || 0) &&
+            !mutation.isPending && (
               <p className="text-base sm:text-lg md:text-xl text-[#151618] font-semibold text-center">
                 No answers were selected. Try again!
               </p>
             )}
 
-          {submitted && (
+          {/* Final results after backend responds */}
+          {!mutation.isPending && submitted && (
             <section className="w-full">
               <div className="w-full flex justify-center items-center mb-5">
                 <span className="text-4xl sm:text-5xl font-bold text-black mt-3">
@@ -325,7 +322,9 @@ export const DefaultQuiz = () => {
               <div className="w-full flex flex-col items-center">
                 {wrongQA.length !== 0 && (
                   <div className="w-full md:w-3/4 lg:w-1/2">
-                    <p className="text-2xl font-medium text-[#151618]">Incorrect Picks</p>
+                    <p className="text-2xl font-medium text-[#151618]">
+                      Incorrect Picks
+                    </p>
                     {wrongQA.map((QA) => (
                       <div key={QA.id} className="pt-4">
                         <p className="text-lg sm:text-xl mb-2 font-medium text-[#151618]">
@@ -333,11 +332,17 @@ export const DefaultQuiz = () => {
                         </p>
                         <div className="flex flex-col gap-1 text-[#151618]">
                           <p>
-                            <span className="text-green-700 mr-2">Correct Answer</span>
-                            <span>{data[QA.id - 1]?.options[QA.correctoption]}</span>
+                            <span className="text-green-700 mr-2">
+                              Correct Answer
+                            </span>
+                            <span>
+                              {data[QA.id - 1]?.options[QA.correctoption]}
+                            </span>
                           </p>
                           <p>
-                            <span className="text-red-500 mr-2">Your Answer</span>
+                            <span className="text-red-500 mr-2">
+                              Your Answer
+                            </span>
                             <span>{data[QA.id - 1]?.options[QA.answer]}</span>
                           </p>
                         </div>
@@ -349,7 +354,9 @@ export const DefaultQuiz = () => {
 
                 {notansweredQA.length !== 0 && (
                   <div className="w-full md:w-3/4 lg:w-1/2">
-                    <p className="text-2xl font-medium text-[#151618]">Not Answered</p>
+                    <p className="text-2xl font-medium text-[#151618]">
+                      Not Answered
+                    </p>
                     {notansweredQA.map((QA) => (
                       <div key={QA.id} className="pt-4">
                         <p className="text-lg sm:text-xl mb-2 font-medium text-[#151618]">
@@ -371,7 +378,9 @@ export const DefaultQuiz = () => {
                       className="text-2xl sm:text-3xl mb-6 font-[500] text-[#E43D12]"
                     />
                     <div className="flex items-center gap-2">
-                      <span className="text-lg sm:text-2xl font-medium text-black">Final Score</span>
+                      <span className="text-lg sm:text-2xl font-medium text-black">
+                        Final Score
+                      </span>
                       <span className="text-base sm:text-xl font-bold text-black">
                         {finalscore}/{data?.length || 0}
                       </span>
@@ -400,10 +409,12 @@ export const DefaultQuiz = () => {
         </main>
 
         {/* Modal */}
-        {showModal && !submitted && (
+        {showModal && !submitted && !mutation.isPending && (
           <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
             <div className="bg-white rounded-2xl w-full max-w-sm p-6">
-              <h3 className="text-xl font-bold mb-4 text-[#151618]">Are you sure?</h3>
+              <h3 className="text-xl font-bold mb-4 text-[#151618]">
+                Are you sure?
+              </h3>
               <div className="flex flex-col sm:flex-row justify-end gap-3">
                 <button
                   className="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400 transition"

@@ -9,21 +9,27 @@ import { QuestionSkeleton } from "@/components/SkeletonLoader";
 import { TopicContext } from "@/contexts/TopicContext";
 
 const fetchQuizData = async (topic) => {
-  const res = await fetch("https://who-wants-to-be-embarrassed-quizo.onrender.com/api/AIquestions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({customtopic:topic}),
-  });
+  const res = await fetch(
+    "https://who-wants-to-be-embarrassed-quizo.onrender.com/api/AIquestions",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ customtopic: topic }),
+    }
+  );
   if (!res.ok) throw new Error("Failed to get custom questions.");
   return res.json();
 };
 
 const submitQuizAnswers = async (answers) => {
-  const res = await fetch("https://who-wants-to-be-embarrassed-quizo.onrender.com/api/bydefault/getscore", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(answers),
-  });
+  const res = await fetch(
+    "https://who-wants-to-be-embarrassed-quizo.onrender.com/api/bydefault/getscore",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(answers),
+    }
+  );
   if (!res.ok) throw new Error("Failed to submit quiz");
   return res.json();
 };
@@ -31,11 +37,11 @@ const submitQuizAnswers = async (answers) => {
 export const AIQuiz = () => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  
-  const { topic} = useContext(TopicContext);
+
+  const { topic } = useContext(TopicContext);
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["AIquiz"],
-    queryFn: ()=>fetchQuizData(topic),
+    queryFn: () => fetchQuizData(topic),
     refetchOnWindowFocus: false,
   });
 
@@ -56,6 +62,9 @@ export const AIQuiz = () => {
   const [wrongQA, setWrongQA] = useState([]);
   const [notansweredQA, setNotansweredQA] = useState([]);
   const [showModal, setshowModal] = useState(false);
+
+  // NEW: submission loader
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const intervalRef = useRef(null);
   const submittingRef = useRef(false);
@@ -120,32 +129,12 @@ export const AIQuiz = () => {
     setCurrentQuestionIndex(nextindex);
   };
 
-  const computeLocalResult = (QAset) => {
-    let score = 0;
-    const wrong = [];
-    const na = [];
-    for (const q of QAset) {
-      if (q.notanswered) {
-        na.push({ id: q.id, question: q.question });
-      } else {
-        if (q.answer === q.correctoption) {
-          score += 1;
-        } else {
-          wrong.push({
-            id: q.id,
-            question: q.question,
-            answer: q.answer,
-            correctoption: q.correctoption,
-          });
-        }
-      }
-    }
-    return { totalscore: score, wronganswers: wrong, notansweredQA: na };
-  };
+  // REMOVED computeLocalResult entirely
 
   const mutation = useMutation({ mutationFn: submitQuizAnswers });
 
   const handleSubmit = () => {
+    if (isSubmitting || submitted) return;
     setshowModal(true);
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
@@ -174,22 +163,28 @@ export const AIQuiz = () => {
   };
 
   const confirmSubmit = (fromTimeout = false) => {
-    if (submittingRef.current) return;
+    if (submittingRef.current || isSubmitting) return;
     submittingRef.current = true;
+    setIsSubmitting(true); // start loader
     setshowModal(false);
+
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
       intervalRef.current = null;
     }
+
     if (!data) {
+      // Nothing to submit, but keep UX clean
       setSubmitted(true);
       setFinalScore(0);
       setWrongQA([]);
       setNotansweredQA([]);
       submittingRef.current = false;
+      setIsSubmitting(false);
       return;
     }
 
+    // Build payload for backend only
     let latestSelected = selectedAnswers;
     try {
       const saved = localStorage.getItem("AIquiz_selectedAnswers");
@@ -207,27 +202,31 @@ export const AIQuiz = () => {
       return { ...q, answer: null, notanswered: true };
     });
 
-    const local = computeLocalResult(QAobjArr);
-    setFinalScore(local.totalscore);
-    setWrongQA(local.wronganswers);
-    setNotansweredQA(local.notansweredQA);
-    setSubmitted(true);
-
+    // Do NOT compute locally; rely on backend
     mutation.mutate(
       { QAset: QAobjArr },
       {
         onSuccess: (resp) => {
-          setFinalScore(resp.totalscore);
-          setWrongQA(resp.wronganswers);
-          setNotansweredQA(resp.notansweredQA);
+          // Expecting { totalscore, wronganswers, notansweredQA }
+          setFinalScore(resp.totalscore ?? 0);
+          setWrongQA(resp.wronganswers ?? []);
+          setNotansweredQA(resp.notansweredQA ?? []);
+          setSubmitted(true);
           queryClient.invalidateQueries({ queryKey: ["AIquiz"] });
           try {
             localStorage.removeItem("AIquiz_selectedAnswers");
           } catch {}
           submittingRef.current = false;
+          setIsSubmitting(false); // stop loader
         },
         onError: () => {
+          // Show a minimal fallback while stopping loader
+          setSubmitted(true);
+          setFinalScore(0);
+          setWrongQA([]);
+          setNotansweredQA([]);
           submittingRef.current = false;
+          setIsSubmitting(false);
         },
       }
     );
@@ -239,15 +238,17 @@ export const AIQuiz = () => {
 
   return (
     <div className="min-h-screen bg-[#0b0f1a] flex items-start sm:items-center justify-center px-4 sm:px-6 py-6">
-      <div className="w-full max-w-6xl bg-[#EBE9E1] rounded-[28px] shadow-xl border border-[rgba(2,6,23,0.06)]
-                      px-5 sm:px-8 md:px-12 lg:px-14 py-6 sm:py-8">
+      <div
+        className="w-full max-w-6xl bg-[#EBE9E1] rounded-[28px] shadow-xl border border-[rgba(2,6,23,0.06)]
+                      px-5 sm:px-8 md:px-12 lg:px-14 py-6 sm:py-8"
+      >
         <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <h1 className="text-[#151618] font-medium text-2xl sm:text-3xl md:text-4xl">
             Quiz
           </h1>
 
           {!submitted && (
-            <div className="w-full md:w-auto md:min-w-[340px]">
+            <div className="w-full md:w-auto md:min-w[340px]">
               <div className="flex items-center justify-between text-[#151618]">
                 <span className="text-sm sm:text-base">Time Remaining</span>
                 <span className="text-sm sm:text-base font-bold">
@@ -264,7 +265,6 @@ export const AIQuiz = () => {
           )}
         </header>
 
-        {/* Main */}
         <main className="mt-6">
           {!submitted && (
             <section className="w-full">
@@ -290,9 +290,11 @@ export const AIQuiz = () => {
                     {currentQuestionIndex !== 0 && (
                       <NextPrevButton
                         text={"Previous"}
-                        isDisabled={currentQuestionIndex === 0}
+                        isDisabled={currentQuestionIndex === 0 || isSubmitting}
                         styles="w-full sm:w-auto"
-                        handleAction={() => handlePrevious(currentQuestionIndex)}
+                        handleAction={() =>
+                          handlePrevious(currentQuestionIndex)
+                        }
                       />
                     )}
                   </div>
@@ -300,9 +302,11 @@ export const AIQuiz = () => {
                     <NextPrevButton
                       text={atLastQuestion ? "Submit" : "Next"}
                       width="w-full sm:w-auto"
-                      isDisabled={false}
+                      isDisabled={isSubmitting}
                       handleAction={() =>
-                        atLastQuestion ? handleSubmit() : handleNext(currentQuestionIndex)
+                        atLastQuestion
+                          ? handleSubmit()
+                          : handleNext(currentQuestionIndex)
                       }
                     />
                   </div>
@@ -325,12 +329,30 @@ export const AIQuiz = () => {
                 <span className="text-4xl sm:text-5xl font-bold text-black mt-3">
                   {finalscore}/{data?.length || 0}
                 </span>
+                <div className="mt-8 w-full flex justify-center">
+                  <button
+                    onClick={() => navigate("/topic")}
+                    className="bg-[#151618] text-white px-6 py-3 rounded-full
+                                   hover:bg-[#E43D12] hover:text-[#151618]
+                                   focus:outline-none focus-visible:ring-2 focus-visible:ring-black/30
+                                   transition"
+                  >
+                    <ShinyText
+                      text="Get Back to the Topic screen. Try custom topic This time"
+                      disabled={false}
+                      speed={3}
+                      className="custom-class font-bold text-base sm:text-xl"
+                    />
+                  </button>
+                </div>
               </div>
 
               <div className="w-full flex flex-col items-center">
                 {wrongQA.length !== 0 && (
                   <div className="w-full md:w-3/4 lg:w-1/2">
-                    <p className="text-2xl font-medium text-[#151618]">Incorrect Picks</p>
+                    <p className="text-2xl font-medium text-[#151618]">
+                      Incorrect Picks
+                    </p>
                     {wrongQA.map((QA) => (
                       <div key={QA.id} className="pt-4">
                         <p className="text-lg sm:text-xl mb-2 font-medium text-[#151618]">
@@ -338,11 +360,17 @@ export const AIQuiz = () => {
                         </p>
                         <div className="flex flex-col gap-1 text-[#151618]">
                           <p>
-                            <span className="text-green-700 mr-2">Correct Answer</span>
-                            <span>{data[QA.id - 1]?.options[QA.correctoption]}</span>
+                            <span className="text-green-700 mr-2">
+                              Correct Answer
+                            </span>
+                            <span>
+                              {data[QA.id - 1]?.options[QA.correctoption]}
+                            </span>
                           </p>
                           <p>
-                            <span className="text-red-500 mr-2">Your Answer</span>
+                            <span className="text-red-500 mr-2">
+                              Your Answer
+                            </span>
                             <span>{data[QA.id - 1]?.options[QA.answer]}</span>
                           </p>
                         </div>
@@ -354,7 +382,9 @@ export const AIQuiz = () => {
 
                 {notansweredQA.length !== 0 && (
                   <div className="w-full md:w-3/4 lg:w-1/2">
-                    <p className="text-2xl font-medium text-[#151618]">Not Answered</p>
+                    <p className="text-2xl font-medium text-[#151618]">
+                      Not Answered
+                    </p>
                     {notansweredQA.map((QA) => (
                       <div key={QA.id} className="pt-4">
                         <p className="text-lg sm:text-xl mb-2 font-medium text-[#151618]">
@@ -376,7 +406,9 @@ export const AIQuiz = () => {
                       className="text-2xl sm:text-3xl mb-6 font-[500] text-[#E43D12]"
                     />
                     <div className="flex items-center gap-2">
-                      <span className="text-lg sm:text-2xl font-medium text-black">Final Score</span>
+                      <span className="text-lg sm:text-2xl font-medium text-black">
+                        Final Score
+                      </span>
                       <span className="text-base sm:text-xl font-bold text-black">
                         {finalscore}/{data?.length || 0}
                       </span>
@@ -385,7 +417,7 @@ export const AIQuiz = () => {
                       <button
                         onClick={() => navigate("/topic")}
                         className="bg-[#151618] text-white px-6 py-3 rounded-full
-                                   hover:bg-[#E43D12] hover:text-[#151618]
+                                   hover:bg[#E43D12] hover:text[#151618]
                                    focus:outline-none focus-visible:ring-2 focus-visible:ring-black/30
                                    transition"
                       >
@@ -404,11 +436,13 @@ export const AIQuiz = () => {
           )}
         </main>
 
-        {/* Modal */}
-        {showModal && !submitted && (
+        {/* Confirm submit modal */}
+        {showModal && !submitted && !isSubmitting && (
           <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
             <div className="bg-white rounded-2xl w-full max-w-sm p-6">
-              <h3 className="text-xl font-bold mb-4 text-[#151618]">Are you sure?</h3>
+              <h3 className="text-xl font-bold mb-4 text-[#151618]">
+                Are you sure?
+              </h3>
               <div className="flex flex-col sm:flex-row justify-end gap-3">
                 <button
                   className="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400 transition"
@@ -423,6 +457,18 @@ export const AIQuiz = () => {
                   Yes
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* loader modal */}
+        {isSubmitting && (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+            <div className="bg-white rounded-2xl w-full max-w-sm p-6 flex flex-col items-center">
+              <div className="w-10 h-10 border-4 border-[#E43D12] border-t-transparent rounded-full animate-spin" />
+              <p className="mt-4 text-[#151618] font-medium">
+                Calculating final score...
+              </p>
             </div>
           </div>
         )}
