@@ -9,7 +9,7 @@ import { QuestionSkeleton } from "@/components/SkeletonLoader";
 import { TopicContext } from "@/contexts/TopicContext";
 
 const fetchQuizData = async (topic) => {
-  const res = await fetch("http://localhost:9090/api/AIquestions", {
+  const res = await fetch("https://who-wants-to-be-embarrassed-quizo.onrender.com/api/AIquestions", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ customtopic: topic }),
@@ -19,7 +19,7 @@ const fetchQuizData = async (topic) => {
 };
 
 const submitQuizAnswers = async (answers) => {
-  const res = await fetch("http://localhost:9090/api/ai/getscore", {
+  const res = await fetch("https://who-wants-to-be-embarrassed-quizo.onrender.com/api/ai/getscore", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(answers),

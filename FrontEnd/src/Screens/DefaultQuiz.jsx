@@ -9,7 +9,7 @@ import { QuestionSkeleton } from "@/components/SkeletonLoader";
 
 const fetchQuizData = async () => {
   const res = await fetch(
-    "http://localhost:9090/api/bydefault"
+    "https://who-wants-to-be-embarrassed-quizo.onrender.com/api/bydefault"
   );
   if (!res.ok) throw new Error("Failed to fetch quiz");
   return res.json();
@@ -17,7 +17,7 @@ const fetchQuizData = async () => {
 
 const submitQuizAnswers = async (answers) => {
   const res = await fetch(
-    "http://localhost:9090/api/bydefault/getscore",
+    "https://who-wants-to-be-embarrassed-quizo.onrender.com/api/bydefault/getscore",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
