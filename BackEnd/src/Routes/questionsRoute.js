@@ -51,8 +51,6 @@ QRoute.post("/bydefault/getscore", async (req, res) => {
       res.status(400).json({ message: "Error! fields are empty." });
     }
 
-    console.log(QAset);
-
     // {"_id":{"$oid":"68da943322b60dc4dce9bce5"},
     // "id":{"$numberInt":"1"},
     // "question":"What is the capital of France?",
@@ -138,14 +136,13 @@ Example:
   });
 
   const chain = RunnableSequence.from([
-    quizPrompt, // 1️⃣ Formats the prompt
-    model, // 2️⃣ Sends it to Gemini
-    parser, // 3️⃣ Parses the JSON result automatically
+    quizPrompt,
+    model, 
+    parser,
   ]);
 
   try {
     const result = await chain.invoke({ usertopic: customtopic });
-    // result is already parsed JSON
     if (!Array.isArray(result) || result.length !== 10) {
       return res.status(400).json({ error: "Invalid quiz data generated." });
     }
@@ -155,5 +152,47 @@ Example:
     res.status(500).json({ error: "Failed to generate quiz questions." });
   }
 });
+
+QRoute.post("/ai/getscore", async (req, res) => {
+  try {
+    const { QAset } = req.body;
+    if (!QAset || !Array.isArray(QAset)) {
+      return res.status(400).json({ message: "Error! fields are empty or invalid format." });
+    }
+
+    let totalmarks = 0;
+    let wrongQA = [];
+    let notAnsweredQA = [];
+
+    // Loop through all client-side question data
+    for (let obj of QAset) {
+      const { correctOptionIndex, answer, notanswered } = obj;
+
+      if (notanswered === true || answer === null || answer === undefined) {
+        notAnsweredQA.push(obj);
+        continue;
+      }
+      if (answer === correctOptionIndex) {
+        totalmarks += 1;
+      } 
+      else {
+        obj["correctoption"] = correctOptionIndex; // include correct option for clarity
+        wrongQA.push(obj);
+      }
+    }
+
+    res.status(200).json({
+      totalscore: totalmarks,
+      wronganswers: wrongQA,
+      notansweredQA: notAnsweredQA,
+    });
+
+  } catch (error) {
+    console.error("Error in /bydefault/getscore:", error);
+    res.status(500).json({ message: "Internal server error while calculating score" });
+  }
+});
+
+
 
 export default QRoute;

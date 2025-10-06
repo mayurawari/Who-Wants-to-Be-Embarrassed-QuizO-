@@ -9,27 +9,21 @@ import { QuestionSkeleton } from "@/components/SkeletonLoader";
 import { TopicContext } from "@/contexts/TopicContext";
 
 const fetchQuizData = async (topic) => {
-  const res = await fetch(
-    "https://who-wants-to-be-embarrassed-quizo.onrender.com/api/AIquestions",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ customtopic: topic }),
-    }
-  );
+  const res = await fetch("http://localhost:9090/api/AIquestions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ customtopic: topic }),
+  });
   if (!res.ok) throw new Error("Failed to get custom questions.");
   return res.json();
 };
 
 const submitQuizAnswers = async (answers) => {
-  const res = await fetch(
-    "https://who-wants-to-be-embarrassed-quizo.onrender.com/api/bydefault/getscore",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(answers),
-    }
-  );
+  const res = await fetch("http://localhost:9090/api/ai/getscore", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(answers),
+  });
   if (!res.ok) throw new Error("Failed to submit quiz");
   return res.json();
 };
@@ -63,7 +57,6 @@ export const AIQuiz = () => {
   const [notansweredQA, setNotansweredQA] = useState([]);
   const [showModal, setshowModal] = useState(false);
 
-  // NEW: submission loader
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const intervalRef = useRef(null);
@@ -129,8 +122,6 @@ export const AIQuiz = () => {
     setCurrentQuestionIndex(nextindex);
   };
 
-  // REMOVED computeLocalResult entirely
-
   const mutation = useMutation({ mutationFn: submitQuizAnswers });
 
   const handleSubmit = () => {
@@ -165,7 +156,7 @@ export const AIQuiz = () => {
   const confirmSubmit = (fromTimeout = false) => {
     if (submittingRef.current || isSubmitting) return;
     submittingRef.current = true;
-    setIsSubmitting(true); // start loader
+    setIsSubmitting(true);
     setshowModal(false);
 
     if (intervalRef.current) {
@@ -174,7 +165,6 @@ export const AIQuiz = () => {
     }
 
     if (!data) {
-      // Nothing to submit, but keep UX clean
       setSubmitted(true);
       setFinalScore(0);
       setWrongQA([]);
@@ -192,22 +182,24 @@ export const AIQuiz = () => {
         const parsed = JSON.parse(saved);
         latestSelected = { ...parsed, ...selectedAnswers };
       }
-    } catch {}
+    } catch (err) {
+      console.log(err);
+    }
 
     const answeredIds = new Set(Object.keys(latestSelected || {}).map(Number));
     const QAobjArr = data.map((q) => {
       if (answeredIds.has(q.id)) {
-        return { ...q, answer: latestSelected[q.id], notanswered: false };
+        let obj = { ...q, answer: latestSelected[q.id], notanswered: false };
+        return obj;
       }
-      return { ...q, answer: null, notanswered: true };
+      let outobj = { ...q, answer: null, notanswered: true };
+      return outobj;
     });
 
-    // Do NOT compute locally; rely on backend
     mutation.mutate(
       { QAset: QAobjArr },
       {
         onSuccess: (resp) => {
-          // Expecting { totalscore, wronganswers, notansweredQA }
           setFinalScore(resp.totalscore ?? 0);
           setWrongQA(resp.wronganswers ?? []);
           setNotansweredQA(resp.notansweredQA ?? []);
@@ -217,10 +209,9 @@ export const AIQuiz = () => {
             localStorage.removeItem("AIquiz_selectedAnswers");
           } catch {}
           submittingRef.current = false;
-          setIsSubmitting(false); // stop loader
+          setIsSubmitting(false);
         },
         onError: () => {
-          // Show a minimal fallback while stopping loader
           setSubmitted(true);
           setFinalScore(0);
           setWrongQA([]);
@@ -363,15 +354,13 @@ export const AIQuiz = () => {
                             <span className="text-green-700 mr-2">
                               Correct Answer
                             </span>
-                            <span>
-                              {data[QA.id - 1]?.options[QA.correctoption]}
-                            </span>
+                            <span>{QA.options[QA.correctoption]}</span>
                           </p>
                           <p>
                             <span className="text-red-500 mr-2">
                               Your Answer
                             </span>
-                            <span>{data[QA.id - 1]?.options[QA.answer]}</span>
+                            <span>{QA.options[QA.answer]}</span>
                           </p>
                         </div>
                         <div className="bg-gray-700 h-px w-full my-4" />

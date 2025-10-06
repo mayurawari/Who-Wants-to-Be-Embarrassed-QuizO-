@@ -9,7 +9,7 @@ import { QuestionSkeleton } from "@/components/SkeletonLoader";
 
 const fetchQuizData = async () => {
   const res = await fetch(
-    "https://who-wants-to-be-embarrassed-quizo.onrender.com/api/bydefault"
+    "http://localhost:9090/api/bydefault"
   );
   if (!res.ok) throw new Error("Failed to fetch quiz");
   return res.json();
@@ -17,7 +17,7 @@ const fetchQuizData = async () => {
 
 const submitQuizAnswers = async (answers) => {
   const res = await fetch(
-    "https://who-wants-to-be-embarrassed-quizo.onrender.com/api/bydefault/getscore",
+    "http://localhost:9090/api/bydefault/getscore",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -119,7 +119,6 @@ export const DefaultQuiz = () => {
     setCurrentQuestionIndex(nextindex);
   };
 
-  // Compute payload only; do not compute local results anymore
   const buildQAset = () => {
     let latestSelected = selectedAnswers;
     try {
@@ -141,6 +140,7 @@ export const DefaultQuiz = () => {
   const mutation = useMutation({
     mutationFn: submitQuizAnswers,
     onSuccess: (resp) => {
+      console.log(resp);
       setFinalScore(resp.totalscore);
       setWrongQA(resp.wronganswers);
       setNotansweredQA(resp.notansweredQA);
@@ -192,7 +192,6 @@ export const DefaultQuiz = () => {
       intervalRef.current = null;
     }
     if (!data) {
-      // No data; treat as empty submission
       setSubmitted(true);
       setFinalScore(0);
       setWrongQA([]);
