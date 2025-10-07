@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 
-export const QuestionCard = ({ item, handleAnswer, selectedAnswers }) => {
+export const QuestionCard = ({ item, handleAnswer, selectedAnswers, index }) => {
   const [showHint, setShowHint] = useState(false);
 
   const onToggleHint = () => setShowHint((s) => !s);
@@ -9,7 +9,7 @@ export const QuestionCard = ({ item, handleAnswer, selectedAnswers }) => {
     <div className="w-full max-w-3xl">
       {/* Question text */}
       <p className="text-lg sm:text-xl mb-3 font-medium text-[#151618]">
-        {item.id}. {item.question}
+        {index + 1}. {item.question}
       </p>
 
       {/* Options */}
