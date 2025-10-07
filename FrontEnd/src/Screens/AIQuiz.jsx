@@ -271,6 +271,7 @@ export const AIQuiz = () => {
                     item={data[currentQuestionIndex]}
                     handleAnswer={handleAnswersVisible}
                     selectedAnswers={selectedAnswers}
+                    index={currentQuestionIndex}
                   />
                 )}
               </div>
