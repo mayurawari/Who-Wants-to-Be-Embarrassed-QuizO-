@@ -336,14 +336,14 @@ export const DefaultQuiz = () => {
                               Correct Answer
                             </span>
                             <span>
-                              {{data.find(q => q.id === QA.id)?.options[QA.correctoption]}}
+                              {data.find(q => q.id === QA.id)?.options[QA.correctoption]}
                             </span>
                           </p>
                           <p>
                             <span className="text-red-500 mr-2">
                               Your Answer
                             </span>
-                            <span>{{data.find(q => q.id === QA.id)?.options[QA.answer]}}</span>
+                            <span>{data.find(q => q.id === QA.id)?.options[QA.answer]}</span>
                           </p>
                         </div>
                         <div className="bg-gray-700 h-px w-full my-4" />
